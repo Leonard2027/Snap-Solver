@@ -77,12 +77,15 @@ class OpenAIModel(BaseModel):
                 response_buffer = ""
                 
                 for chunk in response:
+                    # 流式收尾 chunk 的 choices 可能为空（仅含 usage），需跳过
+                    if not chunk.choices:
+                        continue
                     if hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content
                         if content:
                             # 累积内容
                             response_buffer += content
-                            
+
                             # 只在累积一定数量的字符或遇到句子结束标记时才发送
                             if len(content) >= 10 or content.endswith(('.', '!', '?', '。', '！', '？', '\n')):
                                 yield {
@@ -185,12 +188,15 @@ class OpenAIModel(BaseModel):
                 response_buffer = ""
                 
                 for chunk in response:
+                    # 流式收尾 chunk 的 choices 可能为空（仅含 usage），需跳过
+                    if not chunk.choices:
+                        continue
                     if hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content
                         if content:
                             # 累积内容
                             response_buffer += content
-                            
+
                             # 只在累积一定数量的字符或遇到句子结束标记时才发送
                             if len(content) >= 10 or content.endswith(('.', '!', '?', '。', '！', '？', '\n')):
                                 yield {
