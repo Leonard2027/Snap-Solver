@@ -1,5 +1,5 @@
 /* ============================================================
-   UIManager — 主题（浅/深/跟随系统）、Toast、设置抽屉开关的唯一实现
+   UIManager — 外观（主题/阅读字号）、Toast、设置抽屉开关的唯一实现
    Sheets    — 统一弹层管理器：所有底部弹出层（模型选择/引导/确认/表单）
                的唯一宿主，栈式叠层，Promise 化。
    本文件只定义，不自建实例；入口统一在 main.js。
@@ -9,7 +9,17 @@ class UIManager {
     constructor() {
         // 'light' | 'dark' | 'system'（system = 不写 data-theme，交给媒体查询）
         this.themeChoice = localStorage.getItem('theme') || 'system';
+        // 'standard' | 'small' | 'xsmall'（standard = 使用默认 token）
+        const storedFontSize = localStorage.getItem('fontSize');
+        this.fontSizeChoice = ['standard', 'small', 'xsmall'].includes(storedFontSize)
+            ? storedFontSize
+            : 'standard';
+        // 兼容曾提供过的放大档位，避免首绘后仍残留旧值
+        if (storedFontSize && this.fontSizeChoice === 'standard' && storedFontSize !== 'standard') {
+            localStorage.removeItem('fontSize');
+        }
         this.applyTheme();
+        this.applyFontSize();
         this.bindStatic();
         Sheets.bindGlobal();
     }
@@ -26,6 +36,25 @@ class UIManager {
         if (choice === 'system') localStorage.removeItem('theme');
         else localStorage.setItem('theme', choice);
         this.applyTheme();
+    }
+
+    /* ---------- 阅读字号 ---------- */
+    applyFontSize() {
+        const root = document.documentElement;
+        if (this.fontSizeChoice === 'standard') root.removeAttribute('data-font-size');
+        else root.setAttribute('data-font-size', this.fontSizeChoice);
+    }
+
+    setFontSize(choice) {
+        if (!['standard', 'small', 'xsmall'].includes(choice)) return;
+        this.fontSizeChoice = choice;
+        if (choice === 'standard') localStorage.removeItem('fontSize');
+        else localStorage.setItem('fontSize', choice);
+        this.applyFontSize();
+    }
+
+    fontSizeLabel() {
+        return { standard: '标准', small: '小', xsmall: '特小' }[this.fontSizeChoice] || '标准';
     }
 
     /* ---------- 设置入口（页面实现见 settings-page.js） ---------- */

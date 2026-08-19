@@ -12,11 +12,15 @@
     <title>Snap Solver</title>
     <link rel="icon" href="/static/favicon.ico">
     <script>
-        // 首绘前应用主题，避免闪烁：light | dark | 缺省=跟随系统
+        // 首绘前应用外观偏好，避免主题或阅读字号闪烁
         (function () {
             try {
                 var t = localStorage.getItem('theme');
                 if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+                var f = localStorage.getItem('fontSize');
+                if (f === 'small' || f === 'xsmall') {
+                    document.documentElement.setAttribute('data-font-size', f);
+                }
             } catch (e) {}
         })();
         window.onerror = function (message, source, lineno, colno, error) {

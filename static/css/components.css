@@ -274,7 +274,7 @@
 
 /* -------- 代码块（独立深底，两主题一致；带语言头 + 复制） -------- */
 .code-block-wrapper {
-    margin: var(--sp-3) 0;
+    margin: var(--reader-section-gap) 0;
     background: var(--code-bg);
     border-radius: var(--r-md);
     overflow: hidden;
@@ -299,15 +299,15 @@
 .code-copy-btn.copied { color: #8fd9b8; }
 .code-block-wrapper pre {
     margin: 0;
-    padding: 14px;
+    padding: var(--reader-code-padding);
     background: none;
     border: none;
     overflow-x: auto;
 }
 .code-block-wrapper pre code {
     font-family: var(--font-mono);
-    font-size: 12.5px;
-    line-height: 1.7;
+    font-size: var(--reader-code-size);
+    line-height: var(--reader-code-line-height);
     background: none;
     padding: 0;
     color: var(--code-text);
