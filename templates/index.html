@@ -100,18 +100,32 @@
         </button>
 
         <div class="answer-scroll" id="answerScroll">
-            <!-- 思考过程：不显眼小字，思考中展开流式打出，结束自动收起为一行 -->
-            <div class="fu-thinking" id="thinkingBlock" data-state="hidden">
-                <div class="fu-thinking-head" id="thinkingHead">
-                    <i class="fas fa-wand-magic-sparkles"></i>
-                    <span class="fu-think-label" id="thinkingLabel">思考中</span>
-                    <span class="fu-think-meta" id="thinkingMeta"></span>
-                    <i class="fas fa-chevron-down fu-think-toggle"></i>
+            <!-- 上一版的卡片式阅读体验；状态变化只更新卡片，不替换整页 -->
+            <section class="answer-card" id="answerCard" data-state="processing" aria-labelledby="answerCardTitle">
+                <div class="answer-card-track" aria-hidden="true"></div>
+                <header class="answer-card-header">
+                    <div class="answer-card-title" id="answerCardTitle">
+                        <span class="answer-card-icon"><i class="fas fa-chart-line"></i></span>
+                        <span>分析结果</span>
+                    </div>
+                    <span class="answer-card-state" id="answerCardState">正在生成</span>
+                </header>
+                <div class="answer-card-body">
+                    <!-- 思考过程默认只占一行；完成后可按需展开 -->
+                    <div class="fu-thinking" id="thinkingBlock" data-state="hidden">
+                        <div class="fu-thinking-head" id="thinkingHead">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span class="fu-think-label" id="thinkingLabel">思考中</span>
+                            <span class="fu-think-meta" id="thinkingMeta"></span>
+                            <i class="fas fa-chevron-down fu-think-toggle"></i>
+                        </div>
+                        <div class="fu-thinking-full" id="thinkingFull"></div>
+                    </div>
+                    <div class="answer-label hidden" id="answerLabel">最终答案</div>
+                    <div class="response-content" id="responseContent"></div>
+                    <div class="answer-notice" id="answerNotice" aria-live="polite"></div>
                 </div>
-                <div class="fu-thinking-full" id="thinkingFull"></div>
-            </div>
-            <div class="answer-label hidden" id="answerLabel">最终答案</div>
-            <div class="response-content" id="responseContent"></div>
+            </section>
             <!-- 完成后的动作行（随内容流，设计 4a） -->
             <div class="answer-actions" id="answerActions">
                 <button class="action-chip" id="resolveBtn"><i class="fas fa-rotate-right"></i><span>重解</span></button>
@@ -122,7 +136,7 @@
             <div class="followup-thread" id="followupThread"></div>
         </div>
 
-        <button class="jump-latest hidden" id="jumpLatest"><i class="fas fa-arrow-down"></i> 跟随最新</button>
+        <button class="jump-latest hidden" id="jumpLatest"><i class="fas fa-arrow-down"></i> 回到最新</button>
 
         <!-- 同题追问输入条：仅完成态出现（设计 4a/4b） -->
         <div class="followup-bar hidden" id="followupBar">
