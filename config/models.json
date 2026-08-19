@@ -72,6 +72,16 @@
             "defaultTier": "deep",
             "description": "OpenAI 旗舰，多模态输入与可调推理强度"
         },
+        "gpt-5.6-terra": {
+            "name": "GPT-5.6 Terra",
+            "provider": "openai",
+            "supportsMultimodal": true,
+            "isReasoning": true,
+            "version": "latest",
+            "reasoningTiers": ["fast", "deep", "max"],
+            "defaultTier": "deep",
+            "description": "均衡档 GPT-5.6，兼顾响应速度、推理质量与成本"
+        },
         "gpt-5.6-luna": {
             "name": "GPT-5.6 Luna",
             "provider": "openai",

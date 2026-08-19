@@ -777,6 +777,17 @@ body[data-view="answer"] .app-topbar { display: none; }
 .cm-head > .fa-circle-check { color: var(--accent); font-size: 18px; }
 .cm-head > .fa-key { color: var(--warning-strong); font-size: 14px; }
 .current-model-card .segmented { margin-top: 14px; }
+.fast-service-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--edge);
+}
+.fast-service-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.fast-service-title { font: 600 14px/1.3 var(--font-sans); color: var(--text); }
+.fast-service-hint { font: 11.5px/1.4 var(--font-sans); color: var(--text-3); }
 
 /* 全部模型列表 */
 .mp-model-list {

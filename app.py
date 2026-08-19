@@ -170,7 +170,8 @@ def create_model_instance(model_id, settings, is_reasoning=False):
         system_prompt=settings.get('systemPrompt'),
         language=settings.get('language', '中文'),
         api_base_url=base_url,  # 现在BaseModel支持api_base_url参数
-        reasoning_tier=settings.get('reasoningTier', 'deep')  # 统一推理档位 fast/deep/max
+        reasoning_tier=settings.get('reasoningTier', 'deep'),  # 统一推理档位 fast/deep/max
+        service_tier='priority' if settings.get('fastService') is True else None
     )
     
     # 设置最大输出Token，但不为阿里巴巴模型设置（它们有自己内部的处理逻辑）

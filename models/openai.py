@@ -4,17 +4,31 @@ from openai import OpenAI
 from .base import BaseModel
 
 class OpenAIModel(BaseModel):
-    def __init__(self, api_key, temperature=0.7, system_prompt=None, language=None, api_base_url=None, model_identifier=None, reasoning_tier="deep"):
+    def __init__(
+        self, api_key, temperature=0.7, system_prompt=None, language=None,
+        api_base_url=None, model_identifier=None, reasoning_tier="deep",
+        service_tier=None
+    ):
         super().__init__(api_key, temperature, system_prompt, language, reasoning_tier=reasoning_tier)
         # 设置API基础URL，默认为OpenAI官方API
         self.api_base_url = api_base_url
         # 允许从外部配置显式指定模型标识符
         self.model_identifier = model_identifier or "gpt-5.6"
+        if service_tier not in (None, 'priority'):
+            raise ValueError(f"Unsupported OpenAI service tier: {service_tier}")
+        self.service_tier = service_tier
 
     def _reasoning_kwargs(self) -> dict:
         """将 fast/deep/max 映射为 OpenAI 的 reasoning_effort 参数。"""
         effort_map = {'fast': 'low', 'deep': 'medium', 'max': 'max'}
         return {'reasoning_effort': effort_map.get(self.reasoning_tier, 'high')}
+
+    def _request_kwargs(self) -> dict:
+        """Return shared OpenAI request options without silently downgrading service tier."""
+        kwargs = self._reasoning_kwargs()
+        if self.service_tier:
+            kwargs['service_tier'] = self.service_tier
+        return kwargs
         
     def get_default_system_prompt(self) -> str:
         return """You are an expert at analyzing questions and providing detailed solutions. When presented with an image of a question:
@@ -70,7 +84,7 @@ class OpenAIModel(BaseModel):
                     messages=messages,
                     stream=True,
                     max_completion_tokens=getattr(self, 'max_tokens', None) or 4000,
-                    **self._reasoning_kwargs()
+                    **self._request_kwargs()
                 )
 
                 # 使用累积缓冲区
@@ -181,7 +195,7 @@ class OpenAIModel(BaseModel):
                     messages=messages,
                     stream=True,
                     max_completion_tokens=getattr(self, 'max_tokens', None) or 4000,
-                    **self._reasoning_kwargs()
+                    **self._request_kwargs()
                 )
 
                 # 使用累积缓冲区

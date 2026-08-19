@@ -110,9 +110,12 @@ class ModelFactory:
             print(f"无法加载百度OCR工具: {str(e)}")
 
     @classmethod
-    def create_model(cls, model_name: str, api_key: str, temperature: float = 0.7,
-                     system_prompt: Optional[str] = None, language: Optional[str] = None, api_base_url: Optional[str] = None,
-                     reasoning_tier: str = "deep") -> BaseModel:
+    def create_model(
+        cls, model_name: str, api_key: str, temperature: float = 0.7,
+        system_prompt: Optional[str] = None, language: Optional[str] = None,
+        api_base_url: Optional[str] = None, reasoning_tier: str = "deep",
+        service_tier: Optional[str] = None
+    ) -> BaseModel:
         """
         Create a model instance based on the model name.
 
@@ -124,6 +127,7 @@ class ModelFactory:
             language: The preferred language for responses
             api_base_url: The base URL for API requests
             reasoning_tier: Unified reasoning depth, one of fast/deep/max
+            service_tier: Optional OpenAI service tier (currently priority)
 
         Returns:
             A model instance
@@ -143,7 +147,8 @@ class ModelFactory:
                 language=language,
                 api_base_url=api_base_url,
                 model_identifier=model_name,
-                reasoning_tier=reasoning_tier
+                reasoning_tier=reasoning_tier,
+                service_tier=service_tier
             )
 
         # 对于DeepSeek模型，需要传递正确的模型名称

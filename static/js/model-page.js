@@ -1,7 +1,7 @@
 /* ============================================================
    ModelPage — 模型选择整页（设计定稿 t2：2a/2b）
    结构：厂商 Tab 横排 → [缺密钥：置顶就地填写卡] → 当前模型卡
-        （名称/描述/档位 segmented，档位全局统一）→ 全部模型 →
+        （名称/档位 segmented/OpenAI Fast 服务）→ 全部模型 →
         [已配密钥：沉底密钥行，可点「修改」原地换成填写卡]
    数据读写全部经 settingsManager；settings 的 change 事件驱动重渲。
    open() 返回 Promise，关闭时 resolve —— main.js 借此实现
@@ -187,6 +187,24 @@ class ModelPage {
                 seg.appendChild(opt);
             });
             card.appendChild(seg);
+        }
+
+        if (s.supportsFastService(m)) {
+            const fastRow = document.createElement('div');
+            fastRow.className = 'fast-service-row';
+            fastRow.innerHTML = `
+                <div class="fast-service-copy">
+                    <span class="fast-service-title">Fast 服务</span>
+                    <span class="fast-service-hint">使用优先处理，可能产生额外费用</span>
+                </div>
+                <label class="switch" aria-label="Fast 服务">
+                    <input type="checkbox" />
+                    <span class="switch-slider"></span>
+                </label>`;
+            const checkbox = fastRow.querySelector('input');
+            checkbox.checked = s.fastServiceEnabled();
+            checkbox.addEventListener('change', () => s.setFastService(checkbox.checked));
+            card.appendChild(fastRow);
         }
         return card;
     }

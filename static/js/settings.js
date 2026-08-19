@@ -5,7 +5,7 @@
    CustomEvent('change', {detail:{type}}) 广播；
    UI 渲染在 model-page.js（模型）与 settings-page.js（设置）。
    对外契约：ready(Promise) / getSettings() / collectApiKeys() /
-            missingKeyForCurrentModel() / selectModel() / setTier() /
+            missingKeyForCurrentModel() / selectModel() / setTier() / setFastService() /
             currentTier() / saveApiKey() / maybeStartOnboarding()
    ============================================================ */
 
@@ -31,10 +31,10 @@ const PROVIDER_LABEL = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Goog
 // 厂商 Tab / 行短名
 const PROVIDER_TAB = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google', alibaba: '通义', doubao: '豆包', moonshot: 'Kimi' };
 
-// 三档展示名（英文短名，内部值仍为 fast/deep/max）
+// 三档展示名（内部值仍为 fast/deep/max，避免破坏已存储的用户偏好）
 const TIER_INFO = {
-    fast: { label: 'Fast' },
-    deep: { label: 'High' },
+    fast: { label: 'Low' },
+    deep: { label: 'Medium' },
     max:  { label: 'Max' },
 };
 
@@ -52,6 +52,7 @@ class SettingsManager extends EventTarget {
         this.currentModel = null;
         this.currentModelId = null;
         this._tier = 'deep';     // 思考档位全局统一，按模型能力钳制
+        this._fastService = false; // OpenAI priority service，三个 OpenAI 模型共享
         this.prompts = {};
         this.currentPromptId = null;
         this.relayApis = {};     // {provider: url} 中转地址
@@ -100,6 +101,7 @@ class SettingsManager extends EventTarget {
         let saved = {};
         try { saved = JSON.parse(localStorage.getItem('snapSettings') || '{}'); } catch (e) {}
         this._tier = ['fast', 'deep', 'max'].includes(saved.tier) ? saved.tier : 'deep';
+        this._fastService = saved.fastService === true;
         this.currentPromptId = (saved.promptId && this.prompts[saved.promptId]) ? saved.promptId : (Object.keys(this.prompts)[0] || null);
         this._language = saved.language || '中文';
         this._proxyEnabled = !!saved.proxyEnabled;
@@ -113,6 +115,7 @@ class SettingsManager extends EventTarget {
         localStorage.setItem('snapSettings', JSON.stringify({
             model: this.currentModelId,
             tier: this._tier,
+            fastService: this._fastService,
             promptId: this.currentPromptId,
             language: this._language,
             proxyEnabled: this._proxyEnabled,
@@ -149,6 +152,21 @@ class SettingsManager extends EventTarget {
         this._tier = tier;
         this.persist();
         this.emitChange('tier');
+    }
+
+    supportsFastService(model = this.currentModel) {
+        return !!model && model.provider === 'openai';
+    }
+
+    fastServiceEnabled() {
+        return this.supportsFastService() && this._fastService;
+    }
+
+    setFastService(enabled) {
+        if (!this.supportsFastService()) return;
+        this._fastService = !!enabled;
+        this.persist();
+        this.emitChange('service');
     }
 
     /* ---------- 密钥 ---------- */
@@ -283,6 +301,7 @@ class SettingsManager extends EventTarget {
             model: this.currentModelId,
             modelInfo: m ? { supportsMultimodal: !!m.is_multimodal, isReasoning: !!m.is_reasoning } : {},
             reasoningTier: this.currentTier(),
+            fastService: this.fastServiceEnabled(),
             systemPrompt: prompt ? prompt.content : '',
             language: this._language,
             proxyEnabled: this._proxyEnabled,
