@@ -85,35 +85,36 @@
 
     <!-- ============ 视图 2：解答屏 ============ -->
     <main class="view view-answer" id="answerView">
-        <div class="answer-topbar">
-            <button class="btn btn-icon plain" id="answerBack" aria-label="返回"><i class="fas fa-arrow-left"></i></button>
+        <!-- 浮动控制岛：不占用答案布局高度，向下滚动时自动隐藏 -->
+        <div class="answer-topbar" id="answerToolbar">
+            <button class="answer-tool" id="answerBack" aria-label="返回"><i class="fas fa-arrow-left"></i></button>
             <div class="status-cluster" id="statusCluster">
                 <span class="status-dot"></span>
                 <i class="fas fa-circle-check status-check"></i>
                 <span class="status-text" id="statusText">准备中</span>
                 <span class="status-meta" id="statusMeta"></span>
             </div>
+            <span class="answer-toolbar-spacer"></span>
+            <button class="answer-tool" id="questionThumb" aria-label="查看题目" title="查看题目">
+                <i class="fas fa-image"></i>
+                <img id="questionThumbImg" alt="" />
+                <span id="questionMeta"></span>
+            </button>
             <button class="btn-stop" id="stopGenerationBtn" aria-label="停止生成"><i class="fas fa-stop"></i></button>
+            <button class="answer-tool" id="answerMoreBtn" aria-label="更多操作" title="更多操作"><i class="fas fa-ellipsis"></i></button>
         </div>
-
-        <!-- 题目缩略条 -->
-        <button class="question-strip" id="questionThumb">
-            <img id="questionThumbImg" alt="题目" />
-            <span class="question-strip-meta" id="questionMeta"></span>
-            <i class="fas fa-magnifying-glass-plus"></i>
-        </button>
+        <button class="answer-toolbar-reveal hidden" id="answerToolbarReveal" aria-label="显示顶部工具栏"></button>
 
         <div class="answer-scroll" id="answerScroll">
-            <!-- 上一版的卡片式阅读体验；状态变化只更新卡片，不替换整页 -->
+            <!-- 沉浸阅读画布：状态与操作由浮动控制岛承载 -->
             <section class="answer-card" id="answerCard" data-state="processing" aria-labelledby="answerCardTitle">
                 <div class="answer-card-track" aria-hidden="true"></div>
-                <header class="answer-card-header">
-                    <div class="answer-card-title" id="answerCardTitle">
-                        <span class="answer-card-icon"><i class="fas fa-chart-line"></i></span>
-                        <span>分析结果</span>
-                    </div>
-                    <span class="answer-card-state" id="answerCardState">正在生成</span>
-                </header>
+                <span class="visually-hidden" id="answerCardTitle">分析结果</span>
+                <span class="visually-hidden" id="answerCardState" aria-live="polite">正在生成</span>
+                <button class="answer-fold-toggle" id="mainAnswerToggle" aria-expanded="true">
+                    <span><i class="fas fa-file-lines"></i> 原始解答</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
                 <div class="answer-card-body">
                     <!-- 思考过程默认只占一行；完成后可按需展开 -->
                     <div class="fu-thinking" id="thinkingBlock" data-state="hidden">
@@ -142,9 +143,17 @@
 
         <button class="jump-latest hidden" id="jumpLatest"><i class="fas fa-arrow-down"></i> 回到最新</button>
 
-        <!-- 同题追问输入条：仅完成态出现（设计 4a/4b） -->
+        <!-- 同题追问：悬浮入口，点击后才展开输入面板 -->
+        <button class="followup-fab hidden" id="followupFab" aria-label="追问" title="追问">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+        <button class="followup-backdrop hidden" id="followupBackdrop" aria-label="收起追问输入框"></button>
         <div class="followup-bar hidden" id="followupBar">
-            <div class="followup-hint" id="followupHint">追问仅围绕本题 · 返回或换题后清空</div>
+            <div class="followup-composer-head">
+                <span>继续追问这道题</span>
+                <button id="followupDismiss" aria-label="收起"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="followup-hint" id="followupHint">追问记录在离开本页后清空</div>
             <div class="followup-input-row">
                 <input type="text" id="followupInput" placeholder="答案没看懂？就这道题继续问…" autocomplete="off" enterkeyhint="send" />
                 <button class="followup-send" id="followupSend" aria-label="发送追问"><i class="fas fa-arrow-up"></i></button>
