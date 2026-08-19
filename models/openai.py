@@ -13,7 +13,7 @@ class OpenAIModel(BaseModel):
 
     def _reasoning_kwargs(self) -> dict:
         """将 fast/deep/max 映射为 OpenAI 的 reasoning_effort 参数。"""
-        effort_map = {'fast': 'low', 'deep': 'high', 'max': 'xhigh'}
+        effort_map = {'fast': 'low', 'deep': 'medium', 'max': 'max'}
         return {'reasoning_effort': effort_map.get(self.reasoning_tier, 'high')}
         
     def get_default_system_prompt(self) -> str:
