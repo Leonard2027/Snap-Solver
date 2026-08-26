@@ -16,18 +16,24 @@ class SnapSolver {
         this.lastCropBoxData = null;    // 上次裁剪框，连刷题预填
         this.lastImageData = null;      // 上次送出的裁剪图，重解/换模型重答用
         this.hasAnswer = false;         // 是否有一屏答案可返回（显式状态）
-        this.autoFollow = true;         // 流式是否贴底跟随
+        this.readingLocked = false;     // 用户主动上翻后锁住阅读位置，只能由“回到最新”解除
         this.generating = false;
         this.thinkingText = '';
         this.thinkingStart = 0;
         this.solveStart = 0;
         this._sizeRaf = 0;
+        this._followRaf = 0;
+        this._lastAnswerScrollTop = 0;
+        this._touchStartY = null;
+        this._scrollbarDragging = false;
+        this._toolbarHideTimer = 0;
 
         // 同题追问（设计 4a/4b/4c）：历史由前端持有，随请求整体上送，后端无状态
         this.mainAnswerText = '';       // 主解答原始 markdown（复制/历史用）
         this.followupTurns = [];        // [{q, answerText, thinkingText, …DOM refs}]
         this.currentTurn = null;        // 生成中的追问轮，null = 事件路由到主解答
         this.followupGenerating = false;
+        this.includeClipboard = false;  // 用户显式选择后才读取电脑文本剪贴板
     }
 
     /* ---------- 视图状态机 ---------- */
@@ -46,8 +52,15 @@ class SnapSolver {
         this.cropArea = document.querySelector('.crop-area');
         this.responseContent = this.el('responseContent');
         this.answerScroll = this.el('answerScroll');
+        this.answerCard = this.el('answerCard');
+        this.answerCardState = this.el('answerCardState');
+        this.answerNotice = this.el('answerNotice');
         this.answerLabel = this.el('answerLabel');
         this.answerActions = this.el('answerActions');
+        this.answerToolbar = this.el('answerToolbar');
+        this.answerToolbarReveal = this.el('answerToolbarReveal');
+        this.answerMoreBtn = this.el('answerMoreBtn');
+        this.mainAnswerToggle = this.el('mainAnswerToggle');
         this.statusCluster = this.el('statusCluster');
         this.statusText = this.el('statusText');
         this.statusMeta = this.el('statusMeta');
@@ -61,7 +74,11 @@ class SnapSolver {
         this.jumpLatest = this.el('jumpLatest');
         this.cropSizeReadout = this.el('cropSizeReadout');
         this.followupThread = this.el('followupThread');
+        this.followupFab = this.el('followupFab');
+        this.followupBackdrop = this.el('followupBackdrop');
         this.followupBar = this.el('followupBar');
+        this.followupDismiss = this.el('followupDismiss');
+        this.followupClipboard = this.el('followupClipboard');
         this.followupHint = this.el('followupHint');
         this.followupInput = this.el('followupInput');
         this.followupSend = this.el('followupSend');
@@ -303,18 +320,123 @@ class SnapSolver {
         }
     }
 
+    /* ---------- 沉浸阅读控制 ---------- */
+    showAnswerToolbar({ autoHide = false } = {}) {
+        if (!this.answerToolbar) return;
+        clearTimeout(this._toolbarHideTimer);
+        this.answerToolbar.classList.remove('is-hidden');
+        this.answerToolbarReveal?.classList.add('hidden');
+        if (autoHide && !this.generating && !this.followupGenerating) {
+            this._toolbarHideTimer = setTimeout(() => this.hideAnswerToolbar(), 1800);
+        }
+    }
+
+    hideAnswerToolbar() {
+        if (!this.answerToolbar || this.generating || this.followupGenerating) return;
+        clearTimeout(this._toolbarHideTimer);
+        this.answerToolbar.classList.add('is-hidden');
+        this.answerToolbarReveal?.classList.remove('hidden');
+    }
+
+    openAnswerMenu() {
+        if (this.generating || this.followupGenerating) return;
+        const s = window.settingsManager;
+        const model = s.currentModel;
+        Sheets.open({
+            name: 'answerMenu',
+            build: (body, ctl) => {
+                const title = document.createElement('h3');
+                title.className = 'confirm-title';
+                title.textContent = '回答操作';
+
+                const modelInfo = document.createElement('div');
+                modelInfo.className = 'answer-menu-model';
+                modelInfo.innerHTML = `
+                    <i class="fas fa-microchip"></i>
+                    <span class="answer-menu-model-name"></span>
+                    <span class="answer-menu-model-tier"></span>`;
+                modelInfo.querySelector('.answer-menu-model-name').textContent = model?.display_name || '未选择模型';
+                modelInfo.querySelector('.answer-menu-model-tier').textContent = TIER_INFO[s.currentTier()]?.label || '';
+
+                const group = document.createElement('div');
+                group.className = 'list-group';
+                const addAction = ({ label, icon, disabled = false, run }) => {
+                    const button = document.createElement('button');
+                    button.className = 'nav-row answer-menu-action';
+                    button.disabled = disabled;
+                    button.innerHTML = `
+                        <i class="fas ${icon} nav-row-icon"></i>
+                        <span class="nav-row-label"></span>
+                        <i class="fas fa-chevron-right"></i>`;
+                    button.querySelector('.nav-row-label').textContent = label;
+                    button.addEventListener('click', () => {
+                        ctl.close();
+                        setTimeout(run, 180);
+                    });
+                    group.appendChild(button);
+                };
+                addAction({ label: '复制回答', icon: 'fa-copy', disabled: !this.mainAnswerText, run: () => this.copyText(this.mainAnswerText) });
+                addAction({ label: '重新解答', icon: 'fa-rotate-right', disabled: !this.lastImageData, run: () => this.lastImageData && this.solveImage(this.lastImageData) });
+                addAction({ label: '换模型重解', icon: 'fa-shuffle', disabled: !this.lastImageData, run: () => this.switchModelAndRetry() });
+
+                const done = document.createElement('button');
+                done.className = 'btn btn-ghost';
+                done.textContent = '关闭';
+                done.addEventListener('click', () => ctl.close());
+                body.append(title, modelInfo, group, done);
+            }
+        });
+    }
+
+    openFollowupComposer() {
+        if (!this.mainAnswerText || this.generating || this.followupGenerating) return;
+        this.followupFab?.classList.add('hidden');
+        this.followupBackdrop?.classList.remove('hidden');
+        this.followupBar?.classList.remove('hidden');
+        setTimeout(() => this.followupInput?.focus(), 80);
+    }
+
+    closeFollowupComposer() {
+        this.followupBackdrop?.classList.add('hidden');
+        this.followupBar?.classList.add('hidden');
+        if (this.mainAnswerText && !this.generating && !this.followupGenerating) {
+            this.followupFab?.classList.remove('hidden');
+        }
+    }
+
+    collapseHistoryForFollowup() {
+        this.answerCard?.classList.add('has-fold', 'is-collapsed');
+        this.mainAnswerToggle?.setAttribute('aria-expanded', 'false');
+        this.followupTurns.forEach(turn => {
+            turn.wrapperEl.classList.add('has-fold', 'is-collapsed');
+            turn.foldToggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    resetAnswerFolds() {
+        this.answerCard?.classList.remove('has-fold', 'is-collapsed');
+        this.mainAnswerToggle?.setAttribute('aria-expanded', 'true');
+    }
+
     /* ---------- 解答屏 ---------- */
     enterAnswerView() {
         this.setView('answer');
         this.hasAnswer = true;
-        this.autoFollow = true;
+        this.resetAnswerFolds();
+        this.showAnswerToolbar();
+        this.readingLocked = false;
         this.solveStart = Date.now();
         this.thinkingText = '';
         this.thinkingStart = 0;
+        if (this._followRaf) cancelAnimationFrame(this._followRaf);
+        this._followRaf = 0;
+        this.answerScroll.scrollTop = 0;
+        this._lastAnswerScrollTop = 0;
         this.jumpLatest?.classList.add('hidden');
         this.answerLabel.classList.add('hidden');
         this.answerActions.classList.remove('visible');
         this.responseContent.innerHTML = '<div class="loading-message">正在分析，请稍候…</div>';
+        this.answerNotice.innerHTML = '';
         this.thinkingBlock.dataset.state = 'hidden';
         this.thinkingLabel.textContent = '思考中';
         this.thinkingFull.textContent = '';
@@ -369,20 +491,27 @@ class SnapSolver {
                 this.setStatus('completed', '解答完成', secs + 's');
                 this.setGenerating(false);
                 this.answerActions.classList.add('visible');
-                // 追问框只在完成态出现（设计 4a）
-                if (this.mainAnswerText) this.followupBar.classList.remove('hidden');
+                if (this.mainAnswerText) this.followupFab?.classList.remove('hidden');
+                this.showAnswerToolbar({ autoHide: true });
                 this.followBottom();
                 break;
             }
             case 'stopped':
+                this.collapseThinking();
                 this.setStatus('stopped', '已停止', '');
                 this.setGenerating(false);
                 this.answerActions.classList.add('visible');
+                if (!this.mainAnswerText) this.responseContent.innerHTML = '';
+                else this.followupFab?.classList.remove('hidden');
+                this.answerNotice.innerHTML = '<div class="fu-note">生成已停止，当前内容已保留。</div>';
+                this.showAnswerToolbar({ autoHide: true });
+                this.followBottom();
                 break;
             case 'error': {
                 let msg = '未知错误';
                 if (typeof data.error === 'string') msg = data.error;
                 else if (data.error) msg = data.error.message || data.error.error || JSON.stringify(data.error);
+                this.collapseThinking();
                 this.setGenerating(false);
                 this.renderErrorScreen(msg);
                 break;
@@ -421,21 +550,23 @@ class SnapSolver {
         // 历史 = 主解答 + 已完成的追问轮（出错/无回答的轮次不进历史）+ 新问题
         const history = [{ role: 'assistant', content: this.mainAnswerText }];
         this.followupTurns.forEach(t => {
-            if (t.answerText) {
+            if (t.answerText && t.includeInHistory) {
                 history.push({ role: 'user', content: t.q });
                 history.push({ role: 'assistant', content: t.answerText });
             }
         });
         history.push({ role: 'user', content: q });
 
+        this.collapseHistoryForFollowup();
         const turn = this.appendFollowupTurn(q);
         this.followupTurns.push(turn);
         this.currentTurn = turn;
         this.followupInput.value = '';
         this.followupSend.classList.remove('ready');
-        this.followupHint.classList.add('hidden');
+        this.setStatus('processing', '追问中', '');
         this.setFollowupGenerating(true);
-        this.autoFollow = true;
+        this.closeFollowupComposer();
+        this.readingLocked = false;
         this.followBottom();
 
         const settings = s.getSettings();
@@ -445,15 +576,27 @@ class SnapSolver {
             this.socket.emit('analyze_image', {
                 image: processed,
                 settings: { ...settings, apiKeys },
-                history
+                history,
+                includeClipboard: this.includeClipboard
             });
         } catch (e) {
             this.failFollowupTurn(turn, '发送失败：' + e.message);
         }
     }
 
-    // 构建一轮追问的 DOM：右侧气泡 + 独立思考折叠行 + 回答区
+    // 构建一轮追问的 DOM：当前轮展开；发送下一轮时折叠为一行历史入口
     appendFollowupTurn(q) {
+        const wrapper = document.createElement('article');
+        wrapper.className = 'followup-turn';
+
+        const foldToggle = document.createElement('button');
+        foldToggle.className = 'followup-fold-toggle';
+        foldToggle.setAttribute('aria-expanded', 'true');
+        foldToggle.innerHTML = `
+            <span><i class="fas fa-reply"></i><span class="followup-fold-label"></span></span>
+            <i class="fas fa-chevron-down"></i>`;
+        foldToggle.querySelector('.followup-fold-label').textContent = '追问：' + q;
+
         const bubble = document.createElement('div');
         bubble.className = 'fu-question';
         bubble.textContent = q;
@@ -474,20 +617,40 @@ class SnapSolver {
         answer.className = 'response-content fu-answer';
         answer.innerHTML = '<div class="loading-message">正在思考…</div>';
 
-        this.followupThread.append(bubble, think, answer);
+        const notice = document.createElement('div');
+        notice.className = 'answer-notice';
+
+        const card = document.createElement('section');
+        card.className = 'answer-card answer-card--followup';
+        card.dataset.state = 'processing';
+        card.innerHTML = `
+            <span class="answer-card-state visually-hidden" aria-live="polite">正在生成</span>
+            <div class="answer-card-body"></div>`;
+        card.querySelector('.answer-card-body').append(think, answer, notice);
+        wrapper.append(foldToggle, bubble, card);
+        this.followupThread.appendChild(wrapper);
 
         const turn = {
-            q, answerText: '', thinkingText: '', thinkStart: 0,
+            q, answerText: '', thinkingText: '', thinkStart: 0, includeInHistory: false,
+            wrapperEl: wrapper,
+            foldToggle,
+            cardEl: card,
+            cardStateEl: card.querySelector('.answer-card-state'),
             thinkEl: think,
             thinkLabel: think.querySelector('.fu-think-label'),
             thinkMeta: think.querySelector('.fu-think-meta'),
             thinkFull: think.querySelector('.fu-thinking-full'),
             answerEl: answer,
+            noticeEl: notice,
         };
         think.querySelector('.fu-thinking-head').addEventListener('click', () => {
             const st = think.dataset.state;
             if (st === 'collapsed') think.dataset.state = 'expanded';
             else if (st === 'expanded') think.dataset.state = 'collapsed';
+        });
+        foldToggle.addEventListener('click', () => {
+            const collapsed = wrapper.classList.toggle('is-collapsed');
+            foldToggle.setAttribute('aria-expanded', String(!collapsed));
         });
         return turn;
     }
@@ -496,6 +659,7 @@ class SnapSolver {
         const t = this.currentTurn;
         switch (data.status) {
             case 'started':
+                this.setFollowupCardState(t, 'processing', '正在生成');
                 break;
             case 'thinking':
                 if (data.content) {
@@ -526,13 +690,18 @@ class SnapSolver {
                     this.setElementContent(t.answerEl, data.content);
                 }
                 this.collapseFollowupThinking(t);
+                t.includeInHistory = !!t.answerText;
+                this.setFollowupCardState(t, 'completed', '已完成');
                 this.finishFollowup();
                 this.followBottom();
                 break;
             case 'stopped':
                 this.collapseFollowupThinking(t);
                 if (!t.answerText) t.answerEl.innerHTML = '<div class="fu-note">已停止，这轮没有生成回答</div>';
-                this.finishFollowup();
+                else t.noticeEl.innerHTML = '<div class="fu-note">生成已停止，当前内容已保留。</div>';
+                this.setFollowupCardState(t, 'stopped', '已停止');
+                this.finishFollowup('stopped');
+                this.followBottom();
                 break;
             case 'error': {
                 let msg = '未知错误';
@@ -544,15 +713,22 @@ class SnapSolver {
         }
     }
 
-    // 追问出错：轮内联报错（不打断整页），该轮不进历史
+    setFollowupCardState(turn, kind, text) {
+        turn.cardEl.dataset.state = kind;
+        turn.cardStateEl.textContent = text;
+    }
+
+    // 追问出错：在本轮卡片内追加提示，保留已生成正文；该轮不进入后续上下文
     failFollowupTurn(turn, msg) {
-        turn.answerText = '';
-        turn.answerEl.innerHTML = '';
+        if (!turn.answerText) turn.answerEl.innerHTML = '';
         const err = document.createElement('div');
         err.className = 'fu-error';
         err.textContent = '追问失败：' + msg;
-        turn.answerEl.appendChild(err);
-        this.finishFollowup();
+        turn.noticeEl.replaceChildren(err);
+        turn.includeInHistory = false;
+        this.setFollowupCardState(turn, 'error', '出现错误');
+        this.finishFollowup('error');
+        this.followBottom();
     }
 
     collapseFollowupThinking(t) {
@@ -565,20 +741,31 @@ class SnapSolver {
         }
     }
 
-    finishFollowup() {
+    finishFollowup(kind = 'completed') {
         this.currentTurn = null;
         this.setFollowupGenerating(false);
+        const labels = { completed: '解答完成', stopped: '已停止', error: '追问失败' };
+        this.setStatus(kind, labels[kind] || '解答完成', '');
         this.followupInput.placeholder = '继续追问这道题…';
+        this.showAnswerToolbar({ autoHide: true });
     }
 
-    // 追问生成中：输入禁用，发送钮变停止（设计 4b）
+    // 追问生成中：输入面板自动收起，停止入口交给浮动顶栏
     setFollowupGenerating(on) {
         this.followupGenerating = on;
-        this.generating = on;                       // 复用贴底跟随/浮标的守卫
+        this.generating = on;
         this.followupInput.disabled = on;
         this.followupSend.classList.toggle('stop', on);
         this.followupSend.innerHTML = on ? '<i class="fas fa-stop"></i>' : '<i class="fas fa-arrow-up"></i>';
-        if (!on) this.jumpLatest?.classList.add('hidden');
+        this.stopGenerationBtn?.classList.toggle('visible', on);
+        this.answerMoreBtn?.classList.toggle('hidden', on);
+        if (on) {
+            this.followupFab?.classList.add('hidden');
+            this.showAnswerToolbar();
+        } else if (this.mainAnswerText) {
+            this.followupFab?.classList.remove('hidden');
+        }
+        this.updateJumpLatest();
     }
 
     resetFollowups() {
@@ -587,6 +774,8 @@ class SnapSolver {
         this.followupGenerating = false;
         this.mainAnswerText = '';
         this.followupThread.innerHTML = '';
+        this.followupFab?.classList.add('hidden');
+        this.followupBackdrop?.classList.add('hidden');
         this.followupBar.classList.add('hidden');
         this.followupHint.classList.remove('hidden');
         this.followupInput.value = '';
@@ -594,21 +783,51 @@ class SnapSolver {
         this.followupInput.placeholder = '答案没看懂？就这道题继续问…';
         this.followupSend.classList.remove('stop', 'ready');
         this.followupSend.innerHTML = '<i class="fas fa-arrow-up"></i>';
+        this.setFollowupClipboardEnabled(false);
+    }
+
+    setFollowupClipboardEnabled(on) {
+        this.includeClipboard = Boolean(on);
+        this.followupClipboard?.setAttribute('aria-pressed', String(this.includeClipboard));
+        if (this.followupHint) {
+            this.followupHint.textContent = this.includeClipboard
+                ? '已开启，将随追问发送当前文本'
+                : '默认关闭，仅支持文本';
+            this.followupHint.classList.remove('hidden');
+        }
     }
 
     setStatus(kind, text, meta) {
         this.statusCluster.className = 'status-cluster ' + kind;
         this.statusText.textContent = text;
         this.statusMeta.textContent = meta || '';
+        if (this.answerCard) this.answerCard.dataset.state = kind;
+        if (this.answerCardState) {
+            this.answerCardState.textContent = {
+                processing: '正在生成',
+                completed: '已完成',
+                stopped: '已停止',
+                error: '出现错误',
+            }[kind] || text;
+        }
     }
 
     setGenerating(on) {
         this.generating = on;
         this.stopGenerationBtn?.classList.toggle('visible', on);
+        this.answerMoreBtn?.classList.toggle('hidden', on);
+        if (on) {
+            this.followupFab?.classList.add('hidden');
+            this.closeFollowupComposer();
+            this.showAnswerToolbar();
+        } else if (this.mainAnswerText && !this.followupGenerating) {
+            this.followupFab?.classList.remove('hidden');
+        }
         if (on) this.answerActions.classList.remove('visible');
+        this.updateJumpLatest();
     }
 
-    /* ---------- 出错态：全屏错误页 ---------- */
+    /* ---------- 出错态：同一卡片内追加错误，保留已生成内容 ---------- */
     classifyError(msg) {
         const s = (msg || '').toLowerCase();
         if (/401|unauthorized|invalid[ _-]?(api[ _-]?)?key|api[ _-]?key|authentication|forbidden|权限|密钥/.test(s)) return 'key';
@@ -642,11 +861,14 @@ class SnapSolver {
         }[kind];
 
         this.setStatus('error', '解答出错', s.currentModel?.display_name || '');
-        this.answerLabel.classList.add('hidden');
         this.answerActions.classList.remove('visible');
+        if (!this.mainAnswerText) {
+            this.answerLabel.classList.add('hidden');
+            this.responseContent.innerHTML = '';
+        }
 
         const screen = document.createElement('div');
-        screen.className = 'error-screen';
+        screen.className = 'answer-error';
         screen.innerHTML = `
             <div class="error-icon-tile"><i class="fas ${spec.icon}"></i></div>
             <div class="error-title"></div>
@@ -672,28 +894,99 @@ class SnapSolver {
         if (kind !== 'other') addBtn('重试', 'fa-rotate-right', () => this.lastImageData && this.solveImage(this.lastImageData));
         addBtn('换个模型', 'fa-shuffle', () => this.switchModelAndRetry());
 
-        this.responseContent.innerHTML = '';
-        this.responseContent.appendChild(screen);
-        this.answerScroll.scrollTo({ top: 0 });
+        this.answerNotice.replaceChildren(screen);
+        this.showAnswerToolbar({ autoHide: true });
+        this.followBottom();
     }
 
-    /* ---------- 流式滚动：贴底才跟随，上滑释放 ---------- */
-    followBottom() {
-        if (this.autoFollow && this.answerScroll) {
-            this.answerScroll.scrollTo({ top: this.answerScroll.scrollHeight, behavior: 'smooth' });
+    /* ---------- 流式滚动：稳定贴底；主动上翻后只由“回到最新”解除 ---------- */
+    distanceFromBottom() {
+        if (!this.answerScroll) return 0;
+        return Math.max(0, this.answerScroll.scrollHeight - this.answerScroll.scrollTop - this.answerScroll.clientHeight);
+    }
+
+    lockReading() {
+        this.readingLocked = true;
+        this.updateJumpLatest();
+    }
+
+    updateJumpLatest() {
+        if (!this.jumpLatest || !this.answerScroll) return;
+        const hasUnreadContent = this.distanceFromBottom() > 40;
+        this.jumpLatest.classList.toggle('hidden', !(this.readingLocked && hasUnreadContent));
+    }
+
+    followBottom({ smooth = false } = {}) {
+        if (this.readingLocked || !this.answerScroll) {
+            this.updateJumpLatest();
+            return;
         }
+        if (smooth) {
+            const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            this.answerScroll.scrollTo({
+                top: this.answerScroll.scrollHeight,
+                behavior: reduceMotion ? 'auto' : 'smooth'
+            });
+            return;
+        }
+        // 流式事件可能很密集：每帧只执行一次直接贴底，不叠加 smooth 动画。
+        if (this._followRaf) return;
+        this._followRaf = requestAnimationFrame(() => {
+            this._followRaf = 0;
+            if (this.readingLocked || !this.answerScroll) return;
+            this.answerScroll.scrollTop = this.answerScroll.scrollHeight;
+            this._lastAnswerScrollTop = this.answerScroll.scrollTop;
+            this.updateJumpLatest();
+        });
     }
 
     setupScrollGuard() {
         if (!this.answerScroll) return;
         this.answerScroll.addEventListener('scroll', () => {
-            const nearBottom = this.answerScroll.scrollHeight - this.answerScroll.scrollTop - this.answerScroll.clientHeight < 40;
-            this.autoFollow = nearBottom;
-            this.jumpLatest?.classList.toggle('hidden', nearBottom || !this.generating);
+            const currentTop = this.answerScroll.scrollTop;
+            const delta = currentTop - this._lastAnswerScrollTop;
+            // Markdown 重绘也可能让 scrollTop 短暂变小，只有真实拖动滚动条才在这里锁定。
+            if (this._scrollbarDragging && currentTop < this._lastAnswerScrollTop - 2) this.lockReading();
+            if (currentTop <= 8 || delta < -6) this.showAnswerToolbar({ autoHide: currentTop > 8 });
+            else if (delta > 6) this.hideAnswerToolbar();
+            this._lastAnswerScrollTop = currentTop;
+            this.updateJumpLatest();
         }, { passive: true });
+        this.answerScroll.addEventListener('wheel', e => {
+            if (e.deltaY < 0) {
+                this.lockReading();
+                this.showAnswerToolbar({ autoHide: true });
+            } else if (e.deltaY > 0) {
+                this.hideAnswerToolbar();
+            }
+        }, { passive: true });
+        this.answerScroll.addEventListener('touchstart', e => {
+            this._touchStartY = e.touches[0]?.clientY ?? null;
+        }, { passive: true });
+        this.answerScroll.addEventListener('touchmove', e => {
+            const y = e.touches[0]?.clientY;
+            if (y != null && this._touchStartY != null && y > this._touchStartY + 3) {
+                this.lockReading();
+                this.showAnswerToolbar({ autoHide: true });
+            } else if (y != null && this._touchStartY != null && y < this._touchStartY - 3) {
+                this.hideAnswerToolbar();
+            }
+            if (y != null) this._touchStartY = y;
+        }, { passive: true });
+        this.answerScroll.addEventListener('pointerdown', e => {
+            const rect = this.answerScroll.getBoundingClientRect();
+            this._scrollbarDragging = e.clientX >= rect.right - 18;
+        }, { passive: true });
+        document.addEventListener('pointerup', () => { this._scrollbarDragging = false; }, { passive: true });
+        document.addEventListener('pointercancel', () => { this._scrollbarDragging = false; }, { passive: true });
+        document.addEventListener('keydown', e => {
+            if (this.view !== 'answer') return;
+            if (e.target instanceof HTMLElement && e.target.matches('input, textarea, select, [contenteditable="true"]')) return;
+            if (['ArrowUp', 'PageUp', 'Home'].includes(e.key) || (e.key === ' ' && e.shiftKey)) this.lockReading();
+        });
         this.jumpLatest?.addEventListener('click', () => {
-            this.autoFollow = true;
-            this.followBottom();
+            this.readingLocked = false;
+            this.followBottom({ smooth: true });
             this.jumpLatest.classList.add('hidden');
         });
     }
@@ -726,9 +1019,18 @@ class SnapSolver {
             }
             if (this.followupGenerating) this.stopGeneration();
             if (this.cropper) { this.cropper.destroy(); this.cropper = null; }
+            clearTimeout(this._toolbarHideTimer);
+            this.closeFollowupComposer();
             this.hasAnswer = false;
             this.resetFollowups();
             this.setView('empty');
+        });
+
+        this.answerMoreBtn?.addEventListener('click', () => this.openAnswerMenu());
+        this.answerToolbarReveal?.addEventListener('click', () => this.showAnswerToolbar({ autoHide: true }));
+        this.mainAnswerToggle?.addEventListener('click', () => {
+            const collapsed = this.answerCard.classList.toggle('is-collapsed');
+            this.mainAnswerToggle.setAttribute('aria-expanded', String(!collapsed));
         });
 
         // 完成后的动作行（设计 4a：重解 / 换模型重解 / 复制）
@@ -736,7 +1038,13 @@ class SnapSolver {
         this.el('switchModelBtn').addEventListener('click', () => this.switchModelAndRetry());
         this.el('copyAnswerBtn').addEventListener('click', () => this.copyText(this.mainAnswerText));
 
-        // 同题追问输入条
+        // 同题追问：默认悬浮按钮，点击后短暂展开输入面板
+        this.followupFab?.addEventListener('click', () => this.openFollowupComposer());
+        this.followupDismiss?.addEventListener('click', () => this.closeFollowupComposer());
+        this.followupBackdrop?.addEventListener('click', () => this.closeFollowupComposer());
+        this.followupClipboard?.addEventListener('click', () => {
+            this.setFollowupClipboardEnabled(!this.includeClipboard);
+        });
         this.followupSend.addEventListener('click', () => {
             if (this.followupGenerating) this.stopGeneration();
             else this.sendFollowup();
@@ -755,7 +1063,7 @@ class SnapSolver {
             else if (st === 'expanded') this.thinkingBlock.dataset.state = 'collapsed';
         });
 
-        // 题目缩略条 → 全屏对照
+        // 顶栏题目图标 → 全屏对照
         this.el('questionThumb')?.addEventListener('click', () => {
             const lb = this.el('lightbox'), img = this.el('lightboxImg');
             if (this.lastImageData && lb && img) { img.src = this.lastImageData; lb.classList.remove('hidden'); }

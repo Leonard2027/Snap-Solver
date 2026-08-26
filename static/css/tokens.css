@@ -21,6 +21,22 @@
     --fs-large: 22px;
     --lh-read: 1.75; /* 答案长文行高 */
 
+    /* -------- 阅读密度（设置页三档，仅影响长文内容，不挤压操作栏） -------- */
+    --reader-font-size: 16px;
+    --reader-followup-size: 15px;
+    --reader-heading-size: 17px;
+    --reader-h1-size: 19px;
+    --reader-code-size: 12.5px;
+    --reader-followup-line-height: 1.6;
+    --reader-code-line-height: 1.7;
+    --reader-block-gap: 8px;
+    --reader-section-gap: 12px;
+    --reader-heading-gap: 18px;
+    --reader-list-indent: 20px;
+    --reader-code-padding: 14px;
+    --reader-cell-padding-y: 6px;
+    --reader-cell-padding-x: 10px;
+
     /* -------- 间距（4 网格）/ 圆角（卡16 · 控件12 · 胶囊999） -------- */
     --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
     --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
@@ -84,6 +100,42 @@
     --code-func: #c9a4f0;
     --code-tag: #7ee787;
     --code-attr: #9cc3ee;
+}
+
+[data-font-size="small"] {
+    --reader-font-size: 14px;
+    --reader-followup-size: 13px;
+    --reader-heading-size: 15px;
+    --reader-h1-size: 17px;
+    --reader-code-size: 11.5px;
+    --lh-read: 1.55;
+    --reader-followup-line-height: 1.45;
+    --reader-code-line-height: 1.5;
+    --reader-block-gap: 6px;
+    --reader-section-gap: 8px;
+    --reader-heading-gap: 12px;
+    --reader-list-indent: 18px;
+    --reader-code-padding: 10px;
+    --reader-cell-padding-y: 4px;
+    --reader-cell-padding-x: 7px;
+}
+
+[data-font-size="xsmall"] {
+    --reader-font-size: 12px;
+    --reader-followup-size: 12px;
+    --reader-heading-size: 13px;
+    --reader-h1-size: 14px;
+    --reader-code-size: 10px;
+    --lh-read: 1.4;
+    --reader-followup-line-height: 1.35;
+    --reader-code-line-height: 1.4;
+    --reader-block-gap: 4px;
+    --reader-section-gap: 6px;
+    --reader-heading-gap: 8px;
+    --reader-list-indent: 16px;
+    --reader-code-padding: 8px;
+    --reader-cell-padding-y: 3px;
+    --reader-cell-padding-x: 5px;
 }
 
 /* ======== 深色主题 token 块（与下方媒体查询镜像保持一致） ======== */

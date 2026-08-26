@@ -12,11 +12,15 @@
     <title>Snap Solver</title>
     <link rel="icon" href="/static/favicon.ico">
     <script>
-        // 首绘前应用主题，避免闪烁：light | dark | 缺省=跟随系统
+        // 首绘前应用外观偏好，避免主题或阅读字号闪烁
         (function () {
             try {
                 var t = localStorage.getItem('theme');
                 if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+                var f = localStorage.getItem('fontSize');
+                if (f === 'small' || f === 'xsmall') {
+                    document.documentElement.setAttribute('data-font-size', f);
+                }
             } catch (e) {}
         })();
         window.onerror = function (message, source, lineno, colno, error) {
@@ -81,37 +85,52 @@
 
     <!-- ============ 视图 2：解答屏 ============ -->
     <main class="view view-answer" id="answerView">
-        <div class="answer-topbar">
-            <button class="btn btn-icon plain" id="answerBack" aria-label="返回"><i class="fas fa-arrow-left"></i></button>
+        <!-- 浮动控制岛：不占用答案布局高度，向下滚动时自动隐藏 -->
+        <div class="answer-topbar" id="answerToolbar">
+            <button class="answer-tool" id="answerBack" aria-label="返回"><i class="fas fa-arrow-left"></i></button>
             <div class="status-cluster" id="statusCluster">
                 <span class="status-dot"></span>
                 <i class="fas fa-circle-check status-check"></i>
                 <span class="status-text" id="statusText">准备中</span>
                 <span class="status-meta" id="statusMeta"></span>
             </div>
+            <span class="answer-toolbar-spacer"></span>
+            <button class="answer-tool" id="questionThumb" aria-label="查看题目" title="查看题目">
+                <i class="fas fa-image"></i>
+                <img id="questionThumbImg" alt="" />
+                <span id="questionMeta"></span>
+            </button>
             <button class="btn-stop" id="stopGenerationBtn" aria-label="停止生成"><i class="fas fa-stop"></i></button>
+            <button class="answer-tool" id="answerMoreBtn" aria-label="更多操作" title="更多操作"><i class="fas fa-ellipsis"></i></button>
         </div>
-
-        <!-- 题目缩略条 -->
-        <button class="question-strip" id="questionThumb">
-            <img id="questionThumbImg" alt="题目" />
-            <span class="question-strip-meta" id="questionMeta"></span>
-            <i class="fas fa-magnifying-glass-plus"></i>
-        </button>
+        <button class="answer-toolbar-reveal hidden" id="answerToolbarReveal" aria-label="显示顶部工具栏"></button>
 
         <div class="answer-scroll" id="answerScroll">
-            <!-- 思考过程：不显眼小字，思考中展开流式打出，结束自动收起为一行 -->
-            <div class="fu-thinking" id="thinkingBlock" data-state="hidden">
-                <div class="fu-thinking-head" id="thinkingHead">
-                    <i class="fas fa-wand-magic-sparkles"></i>
-                    <span class="fu-think-label" id="thinkingLabel">思考中</span>
-                    <span class="fu-think-meta" id="thinkingMeta"></span>
-                    <i class="fas fa-chevron-down fu-think-toggle"></i>
+            <!-- 沉浸阅读画布：状态与操作由浮动控制岛承载 -->
+            <section class="answer-card" id="answerCard" data-state="processing" aria-labelledby="answerCardTitle">
+                <div class="answer-card-track" aria-hidden="true"></div>
+                <span class="visually-hidden" id="answerCardTitle">分析结果</span>
+                <span class="visually-hidden" id="answerCardState" aria-live="polite">正在生成</span>
+                <button class="answer-fold-toggle" id="mainAnswerToggle" aria-expanded="true">
+                    <span><i class="fas fa-file-lines"></i> 原始解答</span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="answer-card-body">
+                    <!-- 思考过程默认只占一行；完成后可按需展开 -->
+                    <div class="fu-thinking" id="thinkingBlock" data-state="hidden">
+                        <div class="fu-thinking-head" id="thinkingHead">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span class="fu-think-label" id="thinkingLabel">思考中</span>
+                            <span class="fu-think-meta" id="thinkingMeta"></span>
+                            <i class="fas fa-chevron-down fu-think-toggle"></i>
+                        </div>
+                        <div class="fu-thinking-full" id="thinkingFull"></div>
+                    </div>
+                    <div class="answer-label hidden" id="answerLabel">最终答案</div>
+                    <div class="response-content" id="responseContent"></div>
+                    <div class="answer-notice" id="answerNotice" aria-live="polite"></div>
                 </div>
-                <div class="fu-thinking-full" id="thinkingFull"></div>
-            </div>
-            <div class="answer-label hidden" id="answerLabel">最终答案</div>
-            <div class="response-content" id="responseContent"></div>
+            </section>
             <!-- 完成后的动作行（随内容流，设计 4a） -->
             <div class="answer-actions" id="answerActions">
                 <button class="action-chip" id="resolveBtn"><i class="fas fa-rotate-right"></i><span>重解</span></button>
@@ -122,11 +141,26 @@
             <div class="followup-thread" id="followupThread"></div>
         </div>
 
-        <button class="jump-latest hidden" id="jumpLatest"><i class="fas fa-arrow-down"></i> 跟随最新</button>
+        <button class="jump-latest hidden" id="jumpLatest"><i class="fas fa-arrow-down"></i> 回到最新</button>
 
-        <!-- 同题追问输入条：仅完成态出现（设计 4a/4b） -->
+        <!-- 同题追问：悬浮入口，点击后才展开输入面板 -->
+        <button class="followup-fab hidden" id="followupFab" aria-label="追问" title="追问">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+        <button class="followup-backdrop hidden" id="followupBackdrop" aria-label="收起追问输入框"></button>
         <div class="followup-bar hidden" id="followupBar">
-            <div class="followup-hint" id="followupHint">追问仅围绕本题 · 返回或换题后清空</div>
+            <div class="followup-composer-head">
+                <span>继续追问这道题</span>
+                <button id="followupDismiss" aria-label="收起"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="followup-options">
+                <button class="followup-clipboard-toggle" id="followupClipboard" type="button"
+                    aria-pressed="false" title="将电脑当前的文本剪贴板随追问发送">
+                    <i class="far fa-clipboard"></i>
+                    <span>附带电脑剪贴板</span>
+                </button>
+                <span class="followup-hint" id="followupHint">默认关闭，仅支持文本</span>
+            </div>
             <div class="followup-input-row">
                 <input type="text" id="followupInput" placeholder="答案没看懂？就这道题继续问…" autocomplete="off" enterkeyhint="send" />
                 <button class="followup-send" id="followupSend" aria-label="发送追问"><i class="fas fa-arrow-up"></i></button>

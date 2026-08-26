@@ -124,6 +124,10 @@ class SettingsPage {
         wrap.appendChild(this.group(
             this.navRow({ icon: 'fa-circle-half-stroke', label: '外观', value: themeText, onClick: () => this.openAppearanceSheet() }),
             this.navRow({
+                icon: 'fa-font', label: '字体大小', value: window.uiManager?.fontSizeLabel() || '标准',
+                onClick: () => this.openFontSizeSheet()
+            }),
+            this.navRow({
                 icon: 'fa-github', brand: true, label: 'GitHub 仓库',
                 value: REPO.name, mono: true, external: true,
                 onClick: () => window.open(REPO.url, '_blank')
@@ -372,7 +376,7 @@ class SettingsPage {
         this.scrollEl.appendChild(this.group(...relayRows));
     }
 
-    /* ---------- 轻量弹层：回复语言 / 外观 ---------- */
+    /* ---------- 轻量弹层：回复语言 / 外观 / 字体大小 ---------- */
     openLanguageSheet() {
         const s = this.s;
         Sheets.open({
@@ -465,6 +469,59 @@ class SettingsPage {
                 done.textContent = '完成';
                 done.addEventListener('click', () => ctl.close());
                 body.append(h, seg, done);
+            }
+        });
+    }
+
+    openFontSizeSheet() {
+        const options = [
+            ['standard', '标准'],
+            ['small', '小'],
+            ['xsmall', '特小'],
+        ];
+        Sheets.open({
+            name: 'fontSize',
+            build: (body, ctl) => {
+                const h = document.createElement('h3');
+                h.className = 'confirm-title';
+                h.textContent = '字体大小';
+
+                const help = document.createElement('p');
+                help.className = 'font-size-help';
+                help.textContent = '字号越小，同一屏能显示越多解答内容';
+
+                const preview = document.createElement('div');
+                preview.className = 'font-size-preview response-content';
+                preview.textContent = '设函数 f(x) = x²，先观察定义域，再逐步完成推导。';
+
+                const seg = document.createElement('div');
+                seg.className = 'segmented font-size-segmented';
+                const syncOptions = active => {
+                    seg.querySelectorAll('.segmented-option').forEach(opt => {
+                        const selected = opt.dataset.value === active;
+                        opt.classList.toggle('active', selected);
+                        opt.setAttribute('aria-pressed', String(selected));
+                    });
+                };
+                options.forEach(([value, label]) => {
+                    const opt = document.createElement('button');
+                    opt.className = 'segmented-option';
+                    opt.dataset.value = value;
+                    opt.textContent = label;
+                    opt.addEventListener('click', () => {
+                        window.uiManager.setFontSize(value);
+                        syncOptions(value);
+                        this.render(); // 刷新设置主页的当前值
+                    });
+                    seg.appendChild(opt);
+                });
+                syncOptions(window.uiManager.fontSizeChoice);
+
+                const done = document.createElement('button');
+                done.className = 'btn btn-ghost';
+                done.textContent = '完成';
+                done.addEventListener('click', () => ctl.close());
+                body.append(h, help, preview, seg, done);
             }
         });
     }

@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO
 import pyautogui
+import pyperclip
 import base64
 from io import BytesIO
 import socket
@@ -63,6 +64,56 @@ PROMPT_FILE = _data_file('prompts.json', seed=os.path.join(CONFIG_DIR, 'prompts.
 
 # 跟踪用户生成任务的字典
 generation_tasks = {}
+
+# 追问时可携带桌面端当前的文本剪贴板。限制长度既避免意外发送过大的
+# 内容，也避免把完整剪贴板打印到服务日志中。
+MAX_CLIPBOARD_CHARS = 12_000
+
+
+def _append_clipboard_to_followup(history):
+    """将本机文本剪贴板附加到最新一轮追问，读取失败或为空时保持原样。"""
+    if (
+        not history
+        or not isinstance(history[-1], dict)
+        or history[-1].get('role') != 'user'
+    ):
+        return history
+
+    try:
+        clipboard_text = pyperclip.paste()
+    except pyperclip.PyperclipException as exc:
+        print(f"Debug - 无法读取桌面剪贴板: {exc}")
+        return history
+
+    if not isinstance(clipboard_text, str) or not clipboard_text.strip():
+        print("Debug - 桌面剪贴板为空，未附加到追问")
+        return history
+
+    if len(clipboard_text) > MAX_CLIPBOARD_CHARS:
+        clipboard_text = clipboard_text[:MAX_CLIPBOARD_CHARS]
+        print(f"Debug - 桌面剪贴板已截断至 {MAX_CLIPBOARD_CHARS} 个字符")
+
+    history[-1] = {
+        **history[-1],
+        'content': (
+            f"{history[-1].get('content', '')}\n\n"
+            "[电脑当前文本剪贴板内容]\n"
+            f"{clipboard_text}"
+        )
+    }
+    print(f"Debug - 已向追问附加桌面剪贴板（{len(clipboard_text)} 个字符）")
+    return history
+
+
+def _prepare_followup_history(history, include_clipboard=False):
+    """清洗追问容器，并仅在用户显式选择时读取电脑剪贴板。"""
+    if not isinstance(history, list):
+        return []
+
+    history = history[-20:]
+    if history and include_clipboard is True:
+        history = _append_clipboard_to_followup(history)
+    return history
 
 # 初始化模型工厂
 ModelFactory.initialize()
@@ -226,10 +277,10 @@ def handle_analyze_image(data):
             return
 
         # 同题追问历史（可选）：纯文本轮次列表，只取最近 20 条防滥用
-        history = data.get('history')
-        if not isinstance(history, list):
-            history = []
-        history = history[-20:]
+        history = _prepare_followup_history(
+            data.get('history'),
+            include_clipboard=data.get('includeClipboard'),
+        )
         if history:
             print(f"Debug - 追问请求, 历史轮次: {len(history)}")
 

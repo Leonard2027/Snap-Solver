@@ -13,7 +13,7 @@ class OpenAIModel(BaseModel):
 
     def _reasoning_kwargs(self) -> dict:
         """将 fast/deep/max 映射为 OpenAI 的 reasoning_effort 参数。"""
-        effort_map = {'fast': 'low', 'deep': 'high', 'max': 'xhigh'}
+        effort_map = {'fast': 'low', 'deep': 'medium', 'max': 'max'}
         return {'reasoning_effort': effort_map.get(self.reasoning_tier, 'high')}
         
     def get_default_system_prompt(self) -> str:
@@ -77,12 +77,15 @@ class OpenAIModel(BaseModel):
                 response_buffer = ""
                 
                 for chunk in response:
+                    # 流式收尾 chunk 的 choices 可能为空（仅含 usage），需跳过
+                    if not chunk.choices:
+                        continue
                     if hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content
                         if content:
                             # 累积内容
                             response_buffer += content
-                            
+
                             # 只在累积一定数量的字符或遇到句子结束标记时才发送
                             if len(content) >= 10 or content.endswith(('.', '!', '?', '。', '！', '？', '\n')):
                                 yield {
@@ -185,12 +188,15 @@ class OpenAIModel(BaseModel):
                 response_buffer = ""
                 
                 for chunk in response:
+                    # 流式收尾 chunk 的 choices 可能为空（仅含 usage），需跳过
+                    if not chunk.choices:
+                        continue
                     if hasattr(chunk.choices[0].delta, 'content'):
                         content = chunk.choices[0].delta.content
                         if content:
                             # 累积内容
                             response_buffer += content
-                            
+
                             # 只在累积一定数量的字符或遇到句子结束标记时才发送
                             if len(content) >= 10 or content.endswith(('.', '!', '?', '。', '！', '？', '\n')):
                                 yield {
