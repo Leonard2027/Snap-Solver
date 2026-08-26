@@ -33,6 +33,7 @@ class SnapSolver {
         this.followupTurns = [];        // [{q, answerText, thinkingText, …DOM refs}]
         this.currentTurn = null;        // 生成中的追问轮，null = 事件路由到主解答
         this.followupGenerating = false;
+        this.includeClipboard = false;  // 用户显式选择后才读取电脑文本剪贴板
     }
 
     /* ---------- 视图状态机 ---------- */
@@ -77,6 +78,7 @@ class SnapSolver {
         this.followupBackdrop = this.el('followupBackdrop');
         this.followupBar = this.el('followupBar');
         this.followupDismiss = this.el('followupDismiss');
+        this.followupClipboard = this.el('followupClipboard');
         this.followupHint = this.el('followupHint');
         this.followupInput = this.el('followupInput');
         this.followupSend = this.el('followupSend');
@@ -561,7 +563,6 @@ class SnapSolver {
         this.currentTurn = turn;
         this.followupInput.value = '';
         this.followupSend.classList.remove('ready');
-        this.followupHint.classList.add('hidden');
         this.setStatus('processing', '追问中', '');
         this.setFollowupGenerating(true);
         this.closeFollowupComposer();
@@ -575,7 +576,8 @@ class SnapSolver {
             this.socket.emit('analyze_image', {
                 image: processed,
                 settings: { ...settings, apiKeys },
-                history
+                history,
+                includeClipboard: this.includeClipboard
             });
         } catch (e) {
             this.failFollowupTurn(turn, '发送失败：' + e.message);
@@ -781,6 +783,18 @@ class SnapSolver {
         this.followupInput.placeholder = '答案没看懂？就这道题继续问…';
         this.followupSend.classList.remove('stop', 'ready');
         this.followupSend.innerHTML = '<i class="fas fa-arrow-up"></i>';
+        this.setFollowupClipboardEnabled(false);
+    }
+
+    setFollowupClipboardEnabled(on) {
+        this.includeClipboard = Boolean(on);
+        this.followupClipboard?.setAttribute('aria-pressed', String(this.includeClipboard));
+        if (this.followupHint) {
+            this.followupHint.textContent = this.includeClipboard
+                ? '已开启，将随追问发送当前文本'
+                : '默认关闭，仅支持文本';
+            this.followupHint.classList.remove('hidden');
+        }
     }
 
     setStatus(kind, text, meta) {
@@ -1028,6 +1042,9 @@ class SnapSolver {
         this.followupFab?.addEventListener('click', () => this.openFollowupComposer());
         this.followupDismiss?.addEventListener('click', () => this.closeFollowupComposer());
         this.followupBackdrop?.addEventListener('click', () => this.closeFollowupComposer());
+        this.followupClipboard?.addEventListener('click', () => {
+            this.setFollowupClipboardEnabled(!this.includeClipboard);
+        });
         this.followupSend.addEventListener('click', () => {
             if (this.followupGenerating) this.stopGeneration();
             else this.sendFollowup();

@@ -513,11 +513,34 @@ body[data-view="answer"] .app-topbar { display: none; }
     border-radius: 50%;
     color: var(--text-3);
 }
+.followup-options {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 8px 8px;
+}
+.followup-clipboard-toggle {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--edge);
+    border-radius: var(--r-pill);
+    background: var(--fill);
+    color: var(--text-2);
+    font: 600 11px/1 var(--font-sans);
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.followup-clipboard-toggle[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
 .followup-hint {
     font: 11px/1 var(--font-sans);
     color: var(--text-3);
     text-align: left;
-    margin: 0 8px 8px;
 }
 .followup-hint.hidden { display: none; }
 .followup-input-row {

@@ -153,7 +153,14 @@
                 <span>继续追问这道题</span>
                 <button id="followupDismiss" aria-label="收起"><i class="fas fa-xmark"></i></button>
             </div>
-            <div class="followup-hint" id="followupHint">追问记录在离开本页后清空</div>
+            <div class="followup-options">
+                <button class="followup-clipboard-toggle" id="followupClipboard" type="button"
+                    aria-pressed="false" title="将电脑当前的文本剪贴板随追问发送">
+                    <i class="far fa-clipboard"></i>
+                    <span>附带电脑剪贴板</span>
+                </button>
+                <span class="followup-hint" id="followupHint">默认关闭，仅支持文本</span>
+            </div>
             <div class="followup-input-row">
                 <input type="text" id="followupInput" placeholder="答案没看懂？就这道题继续问…" autocomplete="off" enterkeyhint="send" />
                 <button class="followup-send" id="followupSend" aria-label="发送追问"><i class="fas fa-arrow-up"></i></button>
